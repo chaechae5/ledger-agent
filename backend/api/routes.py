@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from agent.db import get_all_expenses, get_expense_by_id, update_expense_direct
+from agent.db import delete_expense, get_all_expenses, get_expense_by_id, update_expense_direct
 from agent.graph import resume_agent, run_agent
 
 router = APIRouter()
@@ -79,6 +79,14 @@ def list_expenses(period: Optional[str] = None, card: Optional[str] = None):
     expenses = get_all_expenses(period=period, card=card)
     total = sum(e["amount"] for e in expenses)
     return {"expenses": expenses, "total": total}
+
+
+@router.delete("/expenses/{expense_id}")
+def remove_expense(expense_id: int):
+    success = delete_expense(expense_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return {"success": True}
 
 
 @router.put("/expenses/{expense_id}")

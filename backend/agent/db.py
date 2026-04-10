@@ -92,6 +92,14 @@ def get_expense_by_id(expense_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def delete_expense(expense_id: int) -> bool:
+    """ID로 지출 내역을 삭제한다. 삭제 성공 여부 반환."""
+    with get_conn() as conn:
+        cursor = conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        conn.commit()
+    return cursor.rowcount > 0
+
+
 def update_expense_direct(expense_id: int, fields: dict) -> Optional[dict]:
     allowed = {"date", "amount", "category", "card", "memo"}
     updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
