@@ -1,0 +1,40 @@
+# 기획/개발 내부 문서
+LOADMAP.md
+ledger_agent.md
+
+# DB 파일
+*.db
+*.sqlite
+*.sqlite3
+
+# 환경 변수
+.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+dist/
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+ledger_agent.ipynb
+
+# Claude Code 로컬 설정
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
