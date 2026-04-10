@@ -85,20 +85,65 @@ _memory = InMemorySaver()
 ledger_agent = graph_builder.compile(checkpointer=_memory)
 
 
+# ── 헬퍼 ──────────────────────────────────────────────────────
+
+def _sanitize_delta(delta: dict) -> dict:
+    """State delta를 JSON 직렬화 가능하게 변환. messages는 요약 형태로."""
+    result = {}
+    for key, value in delta.items():
+        if value is None:
+            continue
+        if key == "messages":
+            if isinstance(value, list) and value:
+                result["messages"] = [
+                    {
+                        "type": type(m).__name__,
+                        "content": str(getattr(m, "content", m))[:80],
+                    }
+                    for m in value
+                ]
+        elif isinstance(value, (str, int, float, bool, list, dict)):
+            result[key] = value
+    return result
+
+
+def _collect_logs(stream_iter) -> tuple[str, list, list]:
+    """스트림을 소비하며 (응답 텍스트, search_result, 실행 로그) 수집."""
+    logs: list[dict] = []
+    response = ""
+    search_result: list = []
+
+    for chunk in stream_iter:
+        if "__interrupt__" in chunk:
+            items = chunk["__interrupt__"]
+            value = items[0].value if items else ""
+            logs.append({
+                "step": len(logs) + 1,
+                "node": "__interrupt__",
+                "output": {"message": str(value)[:200]},
+            })
+            response = str(value)
+        else:
+            for node_name, delta in chunk.items():
+                sanitized = _sanitize_delta(delta)
+                logs.append({
+                    "step": len(logs) + 1,
+                    "node": node_name,
+                    "output": sanitized,
+                })
+                # response / search_result 최신값 추적
+                if sanitized.get("response"):
+                    response = sanitized["response"]
+                if "search_result" in sanitized and sanitized["search_result"] is not None:
+                    search_result = sanitized["search_result"]
+
+    return response, search_result, logs
+
+
 # ── 실행 함수 ─────────────────────────────────────────────────
 
-def _parse_result(result: dict) -> tuple[str, list]:
-    """그래프 결과에서 (응답 텍스트, search_result) 반환."""
-    if "__interrupt__" in result:
-        response = result["__interrupt__"][0].value
-    else:
-        response = result.get("response") or ""
-    search_result = result.get("search_result") or []
-    return response, search_result
-
-
-def run_agent(user_input: str, session_id: str = "default") -> tuple[str, list]:
-    """새 메시지를 처리한다. (응답 텍스트, search_result) 반환."""
+def run_agent(user_input: str, session_id: str = "default") -> tuple[str, list, list]:
+    """새 메시지를 처리한다. (응답 텍스트, search_result, logs) 반환."""
     config = {"configurable": {"thread_id": session_id}}
     initial_state: AccountBookState = {
         "messages": [HumanMessage(content=user_input)],
@@ -111,12 +156,14 @@ def run_agent(user_input: str, session_id: str = "default") -> tuple[str, list]:
         "updated_row": None,
         "response": None,
     }
-    result = ledger_agent.invoke(initial_state, config=config)
-    return _parse_result(result)
+    stream_iter = ledger_agent.stream(initial_state, config=config, stream_mode="updates")
+    return _collect_logs(stream_iter)
 
 
-def resume_agent(user_input: str, session_id: str = "default") -> tuple[str, list]:
-    """interrupt 이후 사용자 응답을 이어받아 재개한다. (응답 텍스트, search_result) 반환."""
+def resume_agent(user_input: str, session_id: str = "default") -> tuple[str, list, list]:
+    """interrupt 이후 사용자 응답을 이어받아 재개한다. (응답 텍스트, search_result, logs) 반환."""
     config = {"configurable": {"thread_id": session_id}}
-    result = ledger_agent.invoke(Command(resume=user_input), config=config)
-    return _parse_result(result)
+    stream_iter = ledger_agent.stream(
+        Command(resume=user_input), config=config, stream_mode="updates"
+    )
+    return _collect_logs(stream_iter)

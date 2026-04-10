@@ -34,6 +34,7 @@ class ChatResponse(BaseModel):
     response: str
     is_pending: bool
     search_result: list
+    logs: list  # LangGraph 노드 실행 로그
 
 
 class ExpenseUpdateRequest(BaseModel):
@@ -53,21 +54,23 @@ def health():
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
-    response, search_result = run_agent(req.message, req.session_id)
+    response, search_result, logs = run_agent(req.message, req.session_id)
     return ChatResponse(
         response=response,
         is_pending=_is_pending(response),
         search_result=search_result,
+        logs=logs,
     )
 
 
 @router.post("/chat/resume", response_model=ChatResponse)
 def chat_resume(req: ChatRequest):
-    response, search_result = resume_agent(req.message, req.session_id)
+    response, search_result, logs = resume_agent(req.message, req.session_id)
     return ChatResponse(
         response=response,
         is_pending=_is_pending(response),
         search_result=search_result,
+        logs=logs,
     )
 
 
