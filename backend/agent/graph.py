@@ -114,28 +114,33 @@ def _collect_logs(stream_iter) -> tuple[str, list, list]:
     search_result: list = []
 
     for chunk in stream_iter:
-        if "__interrupt__" in chunk:
-            items = chunk["__interrupt__"]
-            value = items[0].value if items else ""
-            logs.append({
-                "step": len(logs) + 1,
-                "node": "__interrupt__",
-                "output": {"message": str(value)[:200]},
-            })
-            response = str(value)
-        else:
-            for node_name, delta in chunk.items():
-                sanitized = _sanitize_delta(delta)
+        try:
+            if "__interrupt__" in chunk:
+                items = chunk["__interrupt__"]
+                # items는 tuple 또는 list일 수 있음
+                first = items[0] if items else None
+                value = getattr(first, "value", str(first)) if first else ""
                 logs.append({
                     "step": len(logs) + 1,
-                    "node": node_name,
-                    "output": sanitized,
+                    "node": "__interrupt__",
+                    "output": {"message": str(value)[:200]},
                 })
-                # response / search_result 최신값 추적
-                if sanitized.get("response"):
-                    response = sanitized["response"]
-                if "search_result" in sanitized and sanitized["search_result"] is not None:
-                    search_result = sanitized["search_result"]
+                response = str(value)
+            else:
+                for node_name, delta in chunk.items():
+                    sanitized = _sanitize_delta(delta if isinstance(delta, dict) else {})
+                    logs.append({
+                        "step": len(logs) + 1,
+                        "node": node_name,
+                        "output": sanitized,
+                    })
+                    if sanitized.get("response"):
+                        response = sanitized["response"]
+                    if "search_result" in sanitized and sanitized["search_result"] is not None:
+                        search_result = sanitized["search_result"]
+        except Exception:
+            # 파싱 실패한 청크는 로그에서 무시하고 계속 진행
+            continue
 
     return response, search_result, logs
 
@@ -156,14 +161,20 @@ def run_agent(user_input: str, session_id: str = "default") -> tuple[str, list, 
         "updated_row": None,
         "response": None,
     }
-    stream_iter = ledger_agent.stream(initial_state, config=config, stream_mode="updates")
-    return _collect_logs(stream_iter)
+    try:
+        stream_iter = ledger_agent.stream(initial_state, config=config, stream_mode="updates")
+        return _collect_logs(stream_iter)
+    except Exception as e:
+        return f"[에이전트 오류] {e}", [], []
 
 
 def resume_agent(user_input: str, session_id: str = "default") -> tuple[str, list, list]:
     """interrupt 이후 사용자 응답을 이어받아 재개한다. (응답 텍스트, search_result, logs) 반환."""
     config = {"configurable": {"thread_id": session_id}}
-    stream_iter = ledger_agent.stream(
-        Command(resume=user_input), config=config, stream_mode="updates"
-    )
-    return _collect_logs(stream_iter)
+    try:
+        stream_iter = ledger_agent.stream(
+            Command(resume=user_input), config=config, stream_mode="updates"
+        )
+        return _collect_logs(stream_iter)
+    except Exception as e:
+        return f"[에이전트 오류] {e}", [], []

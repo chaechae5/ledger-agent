@@ -1,6 +1,7 @@
 # 기획/개발 내부 문서
 LOADMAP.md
 ledger_agent.md
+FastAPI_Python_*.md
 
 # DB 파일
 *.db
