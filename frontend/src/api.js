@@ -42,4 +42,7 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  deleteExpense: (id) =>
+    request(`/expenses/${id}`, { method: 'DELETE' }),
 }
