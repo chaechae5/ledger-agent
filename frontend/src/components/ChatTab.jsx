@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { api } from '../api.js'
+import AgentLogPanel from './AgentLogPanel.jsx'
 
 const INTERRUPT_HINTS = [
   '몇 번을 수정할까요?',
@@ -29,6 +30,7 @@ export default function ChatTab() {
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)   // interrupt 대기 중
   const [loading, setLoading] = useState(false)
+  const [latestLogs, setLatestLogs] = useState([]) // 최근 실행 로그
   const sessionId = useRef(getSessionId())
   const bottomRef = useRef(null)
 
@@ -48,6 +50,7 @@ export default function ChatTab() {
       const fn = pending ? api.resume : api.chat
       const res = await fn(text, sessionId.current)
       setPending(res.is_pending)
+      setLatestLogs(res.logs || [])
       setMessages((m) => [...m, { role: 'ai', text: res.response }])
     } catch (e) {
       setMessages((m) => [...m, { role: 'ai', text: `오류: ${e.message}`, error: true }])
@@ -67,72 +70,86 @@ export default function ChatTab() {
     localStorage.removeItem('ledger_session_id')
     sessionId.current = getSessionId()
     setPending(false)
+    setLatestLogs([])
     setMessages([{ role: 'ai', text: '새 세션을 시작합니다.' }])
   }
 
   return (
-    <div style={styles.wrap}>
-      {/* 메시지 목록 */}
-      <div style={styles.messageList}>
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            style={{
-              ...styles.bubble,
-              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-              background: m.role === 'user' ? '#1a1a2e' : m.error ? '#fde8e8' : '#fff',
-              color: m.role === 'user' ? '#fff' : '#1a1a1a',
-              border: m.role === 'user' ? 'none' : '1px solid #e0e0e0',
-            }}
-          >
-            <pre style={styles.pre}>{m.text}</pre>
-          </div>
-        ))}
-        {loading && (
-          <div style={{ ...styles.bubble, background: '#fff', border: '1px solid #e0e0e0', alignSelf: 'flex-start' }}>
-            <span style={styles.dots}>...</span>
+    <div style={styles.outer}>
+      {/* ── 채팅 영역 ── */}
+      <div style={styles.chatCol}>
+        <div style={styles.messageList}>
+          {messages.map((m, i) => (
+            <div
+              key={i}
+              style={{
+                ...styles.bubble,
+                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                background: m.role === 'user' ? '#1a1a2e' : m.error ? '#fde8e8' : '#fff',
+                color: m.role === 'user' ? '#fff' : '#1a1a1a',
+                border: m.role === 'user' ? 'none' : '1px solid #e0e0e0',
+              }}
+            >
+              <pre style={styles.pre}>{m.text}</pre>
+            </div>
+          ))}
+          {loading && (
+            <div style={{ ...styles.bubble, background: '#fff', border: '1px solid #e0e0e0', alignSelf: 'flex-start' }}>
+              <span style={styles.dots}>...</span>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* interrupt 안내 */}
+        {pending && (
+          <div style={styles.pendingBanner}>
+            답변을 기다리고 있어요. 위 질문에 답해주세요.
           </div>
         )}
-        <div ref={bottomRef} />
-      </div>
 
-      {/* interrupt 안내 */}
-      {pending && (
-        <div style={styles.pendingBanner}>
-          답변을 기다리고 있어요. 위 질문에 답해주세요.
-        </div>
-      )}
-
-      {/* 입력창 */}
-      <div style={styles.inputRow}>
-        <textarea
-          style={styles.textarea}
-          rows={2}
-          placeholder={pending ? '질문에 답변해주세요...' : '메시지를 입력하세요... (Enter 전송)'}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={loading}
-        />
-        <div style={styles.btnCol}>
-          <button onClick={send} disabled={loading || !input.trim()} style={styles.sendBtn}>
-            전송
-          </button>
-          <button onClick={resetSession} style={styles.resetBtn} title="세션 초기화">
-            ↺
-          </button>
+        {/* 입력창 */}
+        <div style={styles.inputRow}>
+          <textarea
+            style={styles.textarea}
+            rows={2}
+            placeholder={pending ? '질문에 답변해주세요...' : '메시지를 입력하세요... (Enter 전송)'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+          />
+          <div style={styles.btnCol}>
+            <button onClick={send} disabled={loading || !input.trim()} style={styles.sendBtn}>
+              전송
+            </button>
+            <button onClick={resetSession} style={styles.resetBtn} title="세션 초기화">
+              ↺
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* ── 실행 로그 패널 ── */}
+      <AgentLogPanel logs={latestLogs} />
     </div>
   )
 }
 
 const styles = {
-  wrap: {
+  outer: {
+    display: 'flex',
+    gap: 16,
+    height: 'calc(100vh - 130px)',
+    alignItems: 'flex-start',
+  },
+  chatCol: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    height: 'calc(100vh - 130px)',
+    height: '100%',
     gap: 12,
+    minWidth: 0,
   },
   messageList: {
     flex: 1,
@@ -193,7 +210,6 @@ const styles = {
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 600,
-    opacity: 1,
   },
   resetBtn: {
     padding: '6px',

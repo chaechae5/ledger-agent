@@ -35,7 +35,7 @@ export default function App() {
       </nav>
 
       {/* 탭 콘텐츠 */}
-      <main style={styles.main}>
+      <main style={{ ...styles.main, maxWidth: activeTab === 0 ? 1100 : 800 }}>
         {activeTab === 0 && <ChatTab />}
         {activeTab === 1 && <ExpensesTab refreshKey={refreshExpenses} />}
         {activeTab === 2 && <EditTab onSaved={triggerRefresh} />}
